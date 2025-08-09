@@ -1,6 +1,7 @@
-from flask import Flask, Response
+from flask import Flask, Response, request
 import requests
 import urllib3
+from datetime import datetime
 
 # Desactivar warnings SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -14,10 +15,12 @@ def home():
 @app.route('/metro')
 def metro():
     try:
-        # Lista de URLs a probar
+        # Probar múltiples URLs y métodos
         urls_to_try = [
             "https://metropolitanogranada.es/MGhorariosreal.asp",
-            "https://metropolitanogranada.es/horariosreal"
+            "https://metropolitanogranada.es/horariosreal",
+            "https://metropolitanogranada.es/api/horarios",
+            "https://metropolitanogranada.es/tiempo-real"
         ]
         
         headers = {
@@ -25,60 +28,89 @@ def metro():
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
             'Referer': 'https://metropolitanogranada.es/',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+            'Connection': 'keep-alive'
         }
-        
-        last_error = None
         
         for url in urls_to_try:
             try:
-                print(f"🔍 Probando URL: {url}")
+                response = requests.get(url, headers=headers, verify=False, timeout=15)
                 
-                response = requests.get(
-                    url, 
-                    headers=headers, 
-                    timeout=15,
-                    verify=False,
-                    allow_redirects=True
-                )
-                response.raise_for_status()
-                
-                content = response.text
-                print(f"✅ Respuesta obtenida de {url}, longitud: {len(content)}")
-                
-                # Verificar si la respuesta contiene datos útiles
-                if (len(content) > 100 and 
-                    ('estación' in content.lower() or 
-                     'ferrocarril' in content.lower() or
-                     'HRdato' in content or
-                     'tabla' in content.lower())):
+                if response.status_code == 200 and len(response.text) > 50:
+                    content = response.text
                     
-                    print(f"🎯 Datos encontrados en: {url}")
-                    
-                    return Response(content, 
-                                   mimetype='text/html',
-                                   headers={
-                                       'Access-Control-Allow-Origin': '*',
-                                       'Access-Control-Allow-Methods': 'GET',
-                                       'Access-Control-Allow-Headers': 'Content-Type',
-                                       'X-Data-Source': url
-                                   })
-                else:
-                    print(f"⚠️ {url} no contiene datos útiles: {content[:200]}...")
-                    
-            except requests.RequestException as e:
-                print(f"❌ Error en {url}: {str(e)}")
-                last_error = e
+                    # Verificar si contiene datos útiles
+                    if ('no hay datos' not in content.lower() and 
+                        ('estación' in content.lower() or 'HRdato' in content)):
+                        
+                        return Response(content, 
+                                       mimetype='text/html',
+                                       headers={
+                                           'Access-Control-Allow-Origin': '*',
+                                           'Access-Control-Allow-Methods': 'GET',
+                                           'Access-Control-Allow-Headers': 'Content-Type',
+                                           'X-Data-Source': url
+                                       })
+                        
+            except:
                 continue
         
-        # Si ninguna URL funcionó
-        return Response(f'No se pudieron obtener datos de ninguna URL. Último error: {str(last_error)}', 
-                       status=503)
+        # Si no hay datos reales, devolver mensaje informativo
+        now = datetime.now().strftime("%H:%M")
+        return Response(f'''
+        <div style="text-align: center; padding: 20px;">
+            <h3>No hay datos disponibles en este momento</h3>
+            <p>Hora actual: {now}</p>
+            <p>El servicio del metro puede estar:</p>
+            <ul style="text-align: left; display: inline-block;">
+                <li>🌙 Cerrado (fuera del horario de servicio)</li>
+                <li>🔧 En mantenimiento</li>
+                <li>⏸️ Temporalmente pausado</li>
+            </ul>
+            <p><em>La aplicación usará datos simulados mientras tanto.</em></p>
+        </div>
+        ''', 
+        mimetype='text/html',
+        headers={'Access-Control-Allow-Origin': '*'})
     
     except Exception as e:
         return Response(f'Error interno: {str(e)}', status=500)
+
+@app.route('/debug')
+def debug():
+    try:
+        now = datetime.now()
+        info = f'''
+        <h2>Debug Metro Granada</h2>
+        <p><strong>Hora actual:</strong> {now.strftime("%Y-%m-%d %H:%M:%S")}</p>
+        <hr>
+        '''
+        
+        urls_to_test = [
+            "https://metropolitanogranada.es/MGhorariosreal.asp",
+            "https://metropolitanogranada.es/horariosreal"
+        ]
+        
+        for url in urls_to_test:
+            try:
+                response = requests.get(url, verify=False, timeout=10)
+                info += f'''
+                <h3>{url}</h3>
+                <p><strong>Status:</strong> {response.status_code}</p>
+                <p><strong>Content Length:</strong> {len(response.text)}</p>
+                <p><strong>Content Type:</strong> {response.headers.get('content-type', 'Unknown')}</p>
+                <details>
+                    <summary>Ver contenido</summary>
+                    <pre style="background: #f5f5f5; padding: 10px; overflow: auto;">{response.text[:2000]}</pre>
+                </details>
+                <hr>
+                '''
+            except Exception as e:
+                info += f'<p><strong>{url}:</strong> Error - {str(e)}</p><hr>'
+        
+        return Response(info, mimetype='text/html')
+        
+    except Exception as e:
+        return f'Debug Error: {str(e)}'
 
 @app.route('/metro', methods=['OPTIONS'])
 def metro_options():
@@ -88,30 +120,5 @@ def metro_options():
         'Access-Control-Allow-Headers': 'Content-Type'
     })
 
-# Endpoint de debug para ver qué devuelve cada URL
-@app.route('/debug')
-def debug():
-    try:
-        url = "https://metropolitanogranada.es/MGhorariosreal.asp"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, verify=False, timeout=10)
-        
-        return Response(f'''
-        <h2>Debug Info</h2>
-        <p><strong>Status:</strong> {response.status_code}</p>
-        <p><strong>Content Length:</strong> {len(response.text)}</p>
-        <p><strong>Content Type:</strong> {response.headers.get('content-type', 'Unknown')}</p>
-        <hr>
-        <h3>Raw Content (primeros 1000 caracteres):</h3>
-        <pre>{response.text[:1000]}</pre>
-        ''', mimetype='text/html')
-        
-    except Exception as e:
-        return f'Debug Error: {str(e)}'
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
-
