@@ -1,5 +1,9 @@
 from flask import Flask, Response
 import requests
+import urllib3
+
+# Desactivar warnings SSL
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
@@ -19,7 +23,14 @@ def metro():
             'Connection': 'keep-alive'
         }
         
-        response = requests.get(url, headers=headers, timeout=10)
+        # Desactivar verificación SSL y usar timeout más largo
+        response = requests.get(
+            url, 
+            headers=headers, 
+            timeout=15,
+            verify=False,  # Desactivar verificación SSL
+            allow_redirects=True
+        )
         response.raise_for_status()
         
         return Response(response.text, 
