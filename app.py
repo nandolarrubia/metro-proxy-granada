@@ -18,9 +18,6 @@ def metro():
         # Probar múltiples URLs y métodos
         urls_to_try = [
             "https://metropolitanogranada.es/MGhorariosreal.asp",
-            "https://metropolitanogranada.es/horariosreal",
-            "https://metropolitanogranada.es/api/horarios",
-            "https://metropolitanogranada.es/tiempo-real"
         ]
         
         headers = {
@@ -87,7 +84,6 @@ def debug():
         
         urls_to_test = [
             "https://metropolitanogranada.es/MGhorariosreal.asp",
-            "https://metropolitanogranada.es/horariosreal"
         ]
         
         for url in urls_to_test:
@@ -122,3 +118,4 @@ def metro_options():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
+
